@@ -110,8 +110,8 @@ blockIdx.x will have values from 0 up to and including gridDim.x-1, and the same
 
 Example:
 ```cpp
-    dim3 blockSize(16, 16, 1);  // 16x16x1 threads per block
-    dim3 gridSize(8, 8, 1);     // 8x8x1 blocks in grid
+dim3 blockSize(16, 16, 1);  // 16x16x1 threads per block
+dim3 gridSize(8, 8, 1);     // 8x8x1 blocks in grid
 ```
 
 ## <<<>>>:
@@ -195,18 +195,18 @@ The CUDA API cudaMemcpy is used to copy data from a buffer residing on the CPU t
 
 ex.
 ```cpp
-    //Allocate Host Memory using cudaMallocHost API. This is best practice
-    // when buffers will be used for copies between CPU and GPU memory
-    cudaMallocHost(&A, vectorLength*sizeof(float));
-    // Allocate memory on the GPU
-    cudaMalloc(&devA, vectorLength*sizeof(float));
-        // Copy data to the GPU
+//Allocate Host Memory using cudaMallocHost API. This is best practice
+// when buffers will be used for copies between CPU and GPU memory
+cudaMallocHost(&A, vectorLength*sizeof(float));
+// Allocate memory on the GPU
+cudaMalloc(&devA, vectorLength*sizeof(float));
+    // Copy data to the GPU
 
-        cudaMemcpy(devA, A, vectorLength*sizeof(float), cudaMemcpyDefault);
+    cudaMemcpy(devA, A, vectorLength*sizeof(float), cudaMemcpyDefault);
 
-    cudaFree(devA);
+cudaFree(devA);
 
-    cudaFreeHost(A);
+cudaFreeHost(A);
 ```
 
 ---
@@ -218,3 +218,6 @@ The simplest way to synchronize the GPU and a host thread is with the use of cud
 ```cpp
 cudaDeviceSynchronize()
 ```
+
+__syncthreads() function blocks all threads in the thread block until all threads have reached the call to __syncthreads()
+
