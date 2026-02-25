@@ -1,0 +1,46 @@
+Detected 1 CUDA device(s)
+
+====================================================
+DEVICE 0
+====================================================
+
+================ BASIC DEVICE INFO ================
+Name                       : NVIDIA A10
+Compute Capability         : 8.6
+
+[Execution]
+Multiprocessors (SMs)      : 72
+Warp Size                  : 32
+Max threads per block      : 1024
+Max threads dim            : 1024 x 1024 x 64
+Max grid size              : 2147483647 x 65535 x 65535
+
+[Memory]
+Total global memory (GB)   : 22.06
+Shared memory per block    : 48.00 KB
+Shared memory per SM       : 100.00 KB
+Registers per block        : 65536
+L2 Cache Size              : 6.00 MB
+Memory clock rate          : 6251.00 MHz
+Memory bus width           : 384 bits
+Theoretical Bandwidth      : 600.10 GB/s
+
+[Features]
+Concurrent kernels         : 1
+Unified addressing         : 1
+Managed memory             : 1
+Async engines              : 2
+
+============== LOW-LEVEL ARCHITECTURE ==============
+Max threads per SM             : 1536
+Max blocks per SM              : 16
+Max warps per SM               : 48
+Registers per SM               : 65536
+Shared mem per SM              : 102400 B
+Shared mem per block (opt-in)  : 101376 B
+Runtime shared mem overhead    : 1024 B
+Multiprocessor count           : 72
+
+[Tensor Core Hints]
+Tensor cores supported         : YES
+TF32 supported                 : YES
