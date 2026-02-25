@@ -44,3 +44,10 @@ Multiprocessor count           : 72
 [Tensor Core Hints]
 Tensor cores supported         : YES
 TF32 supported                 : YES
+
+
+https://www.nvidia.com/content/dam/en-zz/Solutions/Data-Center/a10/pdf/a10-datasheet.pdf
+
+FP32 -> 31.2 TFLOPS
+Memory Bandwidth -> 600 GB/s
+=> 52 FLOPs/Byte

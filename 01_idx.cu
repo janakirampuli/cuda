@@ -27,8 +27,8 @@ __global__ void whoami(void){
 }
 
 int main(int argc, char **argv){
-    const int b_x = 2, b_y = 3, b_z = 4;
-    const int t_x = 4, t_y = 4, t_z = 4;
+    const int b_x = 1, b_y = 2, b_z = 3;
+    const int t_x = 2, t_y = 2, t_z = 2;
 
     int blocks_per_grid = b_x * b_y * b_z;
     int threads_per_block = t_x * t_y * t_z;

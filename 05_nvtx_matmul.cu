@@ -1,9 +1,9 @@
-#include<stdio.h>
-#include<stdlib.h>
-#include<time.h>
-#include<cuda_runtime_api.h>
-#include<nvtx3/nvToolsExt.h>
-#include<iostream>
+#include "utils/cuda_utils.cuh"
+
+#include <cstdio>
+#include <cstdlib>
+#include <ctime>
+#include <nvtx3/nvToolsExt.h>
 
 #define N 1024
 #define BLOCK_SIZE 32
@@ -21,12 +21,6 @@ __global__ void matmul_gpu(float *A, float *B, float *C, int m, int k, int n) {
     }
 }
 
-void init_matrix(float *mat, int rows, int cols) {
-    for (int i = 0; i < rows * cols; i++) {
-        mat[i] = (float)rand() / RAND_MAX;
-    }
-}
-
 int main(){
 
     float *A, *B, *C;
@@ -37,39 +31,39 @@ int main(){
     C = (float*)malloc(size);
 
     srand(time(NULL));
-    init_matrix(A, N, N);
-    init_matrix(B, N, N);
+    cuda_utils::init_matrix(A, N, N);
+    cuda_utils::init_matrix(B, N, N);
 
     nvtxRangePush("matmul");
     float *d_A, *d_B, *d_C;
 
     nvtxRangePush("memory allocation");
-    cudaMalloc(&d_A, size);
-    cudaMalloc(&d_B, size);
-    cudaMalloc(&d_C, size);
+    CUDA_CHECK(cudaMalloc(&d_A, size));
+    CUDA_CHECK(cudaMalloc(&d_B, size));
+    CUDA_CHECK(cudaMalloc(&d_C, size));
     nvtxRangePop();
 
     nvtxRangePush("memory copy H2D");
-    cudaMemcpy(d_A, A, size, cudaMemcpyHostToDevice);
-    cudaMemcpy(d_B, B, size, cudaMemcpyHostToDevice);
+    CUDA_CHECK(cudaMemcpy(d_A, A, size, cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(d_B, B, size, cudaMemcpyHostToDevice));
     nvtxRangePop();
 
     dim3 blockDim(BLOCK_SIZE, BLOCK_SIZE);
-    dim3 gridDim((N + BLOCK_SIZE - 1) / BLOCK_SIZE, (N + BLOCK_SIZE - 1) / BLOCK_SIZE);
+    dim3 gridDim(cuda_utils::ceil_div(N, BLOCK_SIZE), cuda_utils::ceil_div(N, BLOCK_SIZE));
 
     nvtxRangePush("kernel execution");
     matmul_gpu<<<gridDim, blockDim>>>(d_A, d_B, d_C, N, N, N);
-    cudaDeviceSynchronize();
+    CUDA_CHECK(cudaDeviceSynchronize());
     nvtxRangePop();
 
     nvtxRangePush("memory copy D2H");
-    cudaMemcpy(C, d_C, size, cudaMemcpyDeviceToHost);
+    CUDA_CHECK(cudaMemcpy(C, d_C, size, cudaMemcpyDeviceToHost));
     nvtxRangePop();
 
     nvtxRangePush("memory deallocation");
-    cudaFree(d_A);
-    cudaFree(d_B);
-    cudaFree(d_C);
+    CUDA_CHECK(cudaFree(d_A));
+    CUDA_CHECK(cudaFree(d_B));
+    CUDA_CHECK(cudaFree(d_C));
     nvtxRangePop();
 
     nvtxRangePop();
@@ -82,66 +76,72 @@ int main(){
 
 /*
 
-Time (%)  Total Time (ns)  Instances   Avg (ns)     Med (ns)    Min (ns)   Max (ns)   StdDev (ns)   Style          Range        
- --------  ---------------  ---------  -----------  -----------  ---------  ---------  -----------  -------  --------------------
-     50.0        358526875          1  358526875.0  358526875.0  358526875  358526875          0.0  PushPop  :matmul             
-     49.4        353865104          1  353865104.0  353865104.0  353865104  353865104          0.0  PushPop  :memory allocation  
-      0.3          2212473          1    2212473.0    2212473.0    2212473    2212473          0.0  PushPop  :memory copy D2H    
-      0.2          1231597          1    1231597.0    1231597.0    1231597    1231597          0.0  PushPop  :kernel execution   
-      0.1           878932          1     878932.0     878932.0     878932     878932          0.0  PushPop  :memory copy H2D    
-      0.0           335229          1     335229.0     335229.0     335229     335229          0.0  PushPop  :memory deallocation
+tldr: 94.2% of total time in cudaMalloc, memory allocation overhead. actual kernel is so fastt
+
+[3/8] Executing 'nvtx_sum' stats report
+
+ Time (%)  Total Time (ns)  Instances   Avg (ns)     Med (ns)    Min (ns)   Max (ns)   StdDev (ns)   Style          Range       
+ --------  ---------------  ---------  -----------  -----------  ---------  ---------  -----------  -------  -------------------
+     50.0        322669887          1  322669887.0  322669887.0  322669887  322669887          0.0  PushPop  matmul             
+     49.3        317859629          1  317859629.0  317859629.0  317859629  317859629          0.0  PushPop  memory allocation  
+      0.3          2192516          1    2192516.0    2192516.0    2192516    2192516          0.0  PushPop  memory copy D2H    
+      0.2          1388608          1    1388608.0    1388608.0    1388608    1388608          0.0  PushPop  kernel execution   
+      0.1           872717          1     872717.0     872717.0     872717     872717          0.0  PushPop  memory copy H2D    
+      0.1           352364          1     352364.0     352364.0     352364     352364          0.0  PushPop  memory deallocation
 
 [4/8] Executing 'osrt_sum' stats report
 
- Time (%)  Total Time (ns)  Num Calls   Avg (ns)    Med (ns)   Min (ns)  Max (ns)   StdDev (ns)           Name         
- --------  ---------------  ---------  ----------  ----------  --------  ---------  -----------  ----------------------
-     83.2        398468212         21  18974676.8  10055947.0      1028  240965055   51349178.5  poll                  
-     16.2         77592071        486    159654.5      8178.5      1015    4376809     400724.5  ioctl                 
-      0.3          1304352         25     52174.1      8662.0      3986     864330     170832.5  mmap64                
-      0.1           662390         10     66239.0     16580.5     14235     289986     105335.9  sem_timedwait         
-      0.0           184942         43      4301.0      4044.0      1665       9340       1552.6  open64                
-      0.0           147630         13     11356.2      4848.0      1769      55470      15142.1  mmap                  
-      0.0           139155         38      3662.0      2430.0      1066      14861       3243.3  fopen                 
-      0.0           132656          3     44218.7     44755.0     41525      46376       2469.6  pthread_create        
-      0.0            70144          1     70144.0     70144.0     70144      70144          0.0  pthread_cond_wait     
-      0.0            55769         10      5576.9      4885.0      3546       8955       1939.8  write                 
-      0.0            55540          1     55540.0     55540.0     55540      55540          0.0  fgets                 
-      0.0            31505         20      1575.3      1299.0      1014       3453        645.2  fclose                
-      0.0            26347          5      5269.4      3345.0      1508      12426       4374.5  fread                 
-      0.0            20670          6      3445.0      3566.0      1838       4863       1316.0  open                  
-      0.0            14463          3      4821.0      4673.0      3585       6205       1316.3  munmap                
-      0.0            13273          6      2212.2      1886.5      1408       3873        953.2  close                 
-      0.0            13164          4      3291.0      3389.0      1715       4671       1525.8  pipe2                 
-      0.0            12404          2      6202.0      6202.0      5277       7127       1308.1  socket                
-      0.0             8028          1      8028.0      8028.0      8028       8028          0.0  connect               
-      0.0             6417          4      1604.3      1514.5      1114       2274        551.7  read                  
-      0.0             4461          1      4461.0      4461.0      4461       4461          0.0  pthread_cond_broadcast
-      0.0             2383          1      2383.0      2383.0      2383       2383          0.0  fcntl                 
-      0.0             1975          1      1975.0      1975.0      1975       1975          0.0  bind                  
-      0.0             1414          1      1414.0      1414.0      1414       1414          0.0  fwrite                
+ Time (%)  Total Time (ns)  Num Calls   Avg (ns)   Med (ns)   Min (ns)  Max (ns)   StdDev (ns)           Name         
+ --------  ---------------  ---------  ----------  ---------  --------  ---------  -----------  ----------------------
+     78.5        298603661         12  24883638.4  1493920.5      1411  230612665   65463236.3  poll                  
+     20.8         79153585        499    158624.4     7096.0       390    4939147     412076.4  ioctl                 
+      0.4          1340837         25     53633.5     6575.0      5137     917118     181444.6  mmap64                
+      0.1           533034         10     53303.4    22249.5     18068     327715      96527.2  sem_timedwait         
+      0.0           177768         43      4134.1     3781.0      1302       9758       1588.3  open64                
+      0.0           140300         39      3597.4     2208.0       806      14297       3452.1  fopen                 
+      0.0           131474          3     43824.7    40602.0     36735      54137       9137.6  pthread_create        
+      0.0           123783         13      9521.8     5524.0      1636      55130      14240.0  mmap                  
+      0.0            85314          1     85314.0    85314.0     85314      85314          0.0  pthread_cond_wait     
+      0.0            53739         12      4478.3     5011.5       502       7455       2152.2  write                 
+      0.0            38242         33      1158.8      974.0       519       3273        598.3  fclose                
+      0.0            34797         27      1288.8       47.0        46      33505       6438.5  fgets                 
+      0.0            27011          7      3858.7     2199.0       123      13604       4711.6  fread                 
+      0.0            19965          6      3327.5     3387.0      1130       5473       1782.9  open                  
+      0.0            13832          4      3458.0     3149.0      1769       5765       1792.8  pipe2                 
+      0.0            12004          3      4001.3     4082.0      3701       4221        269.2  munmap                
+      0.0            11579         15       771.9      484.0       331       2234        615.1  read                  
+      0.0            10971         20       548.6      536.5       186       1909        379.0  fcntl                 
+      0.0            10567          2      5283.5     5283.5      4488       6079       1125.0  socket                
+      0.0             9612          3      3204.0     1434.0      1365       6813       3125.7  pthread_cond_broadcast
+      0.0             6743          1      6743.0     6743.0      6743       6743          0.0  connect               
+      0.0             2429          2      1214.5     1214.5       969       1460        347.2  fwrite                
+      0.0             2146          7       306.6      306.0       215        405         77.8  dup                   
+      0.0             1655          1      1655.0     1655.0      1655       1655          0.0  bind                  
+      0.0              824          1       824.0      824.0       824        824          0.0  listen                
 
 [5/8] Executing 'cuda_api_sum' stats report
 
- Time (%)  Total Time (ns)  Num Calls   Avg (ns)   Med (ns)   Min (ns)  Max (ns)  StdDev (ns)          Name         
- --------  ---------------  ---------  ----------  ---------  --------  --------  -----------  ---------------------
-     94.6         81606555          3  27202185.0    46940.0     44343  81515272   47036513.1  cudaMalloc           
-      3.6          3082915          3   1027638.3   456232.0    415629   2211054    1025069.1  cudaMemcpy           
-      1.4          1197665          1   1197665.0  1197665.0   1197665   1197665          0.0  cudaDeviceSynchronize
-      0.4           332716          3    110905.3   124652.0     78125    129939      28511.4  cudaFree             
-      0.0            29946          1     29946.0    29946.0     29946     29946          0.0  cudaLaunchKernel     
+ Time (%)  Total Time (ns)  Num Calls   Avg (ns)   Med (ns)   Min (ns)  Max (ns)  StdDev (ns)           Name         
+ --------  ---------------  ---------  ----------  ---------  --------  --------  -----------  ----------------------
+     94.2         78033848          3  26011282.7    65761.0     42664  77925423   44958965.8  cudaMalloc            
+      3.7          3055281          3   1018427.0   435779.0    428504   2190998    1015482.8  cudaMemcpy            
+      1.4          1194036          1   1194036.0  1194036.0   1194036   1194036          0.0  cudaDeviceSynchronize 
+      0.4           349887          3    116629.0   126578.0     86132    137177      26937.6  cudaFree              
+      0.2           183232          1    183232.0   183232.0    183232    183232          0.0  cudaLaunchKernel      
+      0.0             1175          1      1175.0     1175.0      1175      1175          0.0  cuModuleGetLoadingMode
 
 [6/8] Executing 'cuda_gpu_kern_sum' stats report
 
  Time (%)  Total Time (ns)  Instances  Avg (ns)   Med (ns)   Min (ns)  Max (ns)  StdDev (ns)                          Name                        
  --------  ---------------  ---------  ---------  ---------  --------  --------  -----------  ----------------------------------------------------
-    100.0          1187266          1  1187266.0  1187266.0   1187266   1187266          0.0  matmul_gpu(float *, float *, float *, int, int, int)
+    100.0          1192707          1  1192707.0  1192707.0   1192707   1192707          0.0  matmul_gpu(float *, float *, float *, int, int, int)
 
 [7/8] Executing 'cuda_gpu_mem_time_sum' stats report
 
  Time (%)  Total Time (ns)  Count  Avg (ns)   Med (ns)   Min (ns)  Max (ns)  StdDev (ns)           Operation          
  --------  ---------------  -----  ---------  ---------  --------  --------  -----------  ----------------------------
-     63.1          1166531      1  1166531.0  1166531.0   1166531   1166531          0.0  [CUDA memcpy Device-to-Host]
-     36.9           682370      2   341185.0   341185.0    340609    341761        814.6  [CUDA memcpy Host-to-Device]
+     62.6          1158563      1  1158563.0  1158563.0   1158563   1158563          0.0  [CUDA memcpy Device-to-Host]
+     37.4           690817      2   345408.5   345408.5    338721    352096       9457.6  [CUDA memcpy Host-to-Device]
 
 [8/8] Executing 'cuda_gpu_mem_size_sum' stats report
 
@@ -149,6 +149,5 @@ Time (%)  Total Time (ns)  Instances   Avg (ns)     Med (ns)    Min (ns)   Max (
  ----------  -----  --------  --------  --------  --------  -----------  ----------------------------
       8.389      2     4.194     4.194     4.194     4.194        0.000  [CUDA memcpy Host-to-Device]
       4.194      1     4.194     4.194     4.194     4.194        0.000  [CUDA memcpy Device-to-Host]
-
 
 */

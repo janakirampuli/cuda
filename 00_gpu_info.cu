@@ -1,23 +1,14 @@
-#include <cuda_runtime.h>
-#include <iostream>
+#include "utils/cuda_utils.cuh"
+
 #include <iomanip>
+#include <iostream>
 
 using namespace std;
-
-#define CHECK(call) \
-{ \
-    cudaError_t err = call; \
-    if (err != cudaSuccess) { \
-        cerr << "CUDA error: " << cudaGetErrorString(err) \
-                  << " at line " << __LINE__ << endl; \
-        exit(EXIT_FAILURE); \
-    } \
-}
 
 int getAttr(cudaDeviceAttr attr, int dev)
 {
     int value;
-    CHECK(cudaDeviceGetAttribute(&value, attr, dev));
+    CUDA_CHECK(cudaDeviceGetAttribute(&value, attr, dev));
     return value;
 }
 
@@ -127,7 +118,7 @@ void printLowLevel(int dev)
 int main()
 {
     int deviceCount;
-    CHECK(cudaGetDeviceCount(&deviceCount));
+    CUDA_CHECK(cudaGetDeviceCount(&deviceCount));
 
     if (deviceCount == 0) {
         cout << "No CUDA devices found.\n";
@@ -139,7 +130,7 @@ int main()
     for (int dev = 0; dev < deviceCount; dev++) {
 
         cudaDeviceProp prop;
-        CHECK(cudaGetDeviceProperties(&prop, dev));
+        CUDA_CHECK(cudaGetDeviceProperties(&prop, dev));
 
         cout << "\n====================================================\n";
         cout << "DEVICE " << dev << "\n";

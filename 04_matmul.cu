@@ -1,13 +1,16 @@
-#include<stdio.h>
-#include<stdlib.h>
-#include<time.h>
-#include<cuda_runtime_api.h>
-#include<iostream>
+#include "utils/cuda_utils.cuh"
+
+#include <cmath>
+#include <cstdio>
+#include <cstdlib>
+#include <ctime>
+#include <iostream>
 
 #define M 512  // Number of rows in A and C
 #define K 512   // Number of columns in A and rows in B
 #define N 256  // Number of columns in B and C
 #define BLOCK_SIZE 32
+
 
 // Example 3x2 @ 2x4 = 3x4 -> (M x K) @ (K x N) = (M x N)
 // A = [[1, 2], 
@@ -39,8 +42,8 @@ void matmul_cpu(float *A, float *B, float *C, int m, int k, int n){
 }
 
 __global__ void matmul_gpu(float *A, float *B, float *C, int m, int k, int n) {
-    int j = threadIdx.x + blockDim.x * blockIdx.x;
-    int i = threadIdx.y + blockDim.y * blockIdx.y;
+    int i = threadIdx.x + blockDim.x * blockIdx.x;
+    int j = threadIdx.y + blockDim.y * blockIdx.y;
 
     if (i < m && j < n){
         float sum = 0.0;
@@ -49,18 +52,6 @@ __global__ void matmul_gpu(float *A, float *B, float *C, int m, int k, int n) {
         }
         C[i*n + j] = sum;
     }
-}
-
-void init_matrix(float *mat, int rows, int cols) {
-    for (int i = 0; i < rows * cols; i++) {
-        mat[i] = (float)rand() / RAND_MAX;
-    }
-}
-
-double get_time() {
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return ts.tv_sec + ts.tv_nsec * 1e-9;
 }
 
 int main(){
@@ -77,18 +68,18 @@ int main(){
     h_C_gpu = (float*)malloc(size_C);
 
     srand(time(NULL));
-    init_matrix(h_A, M, K);
-    init_matrix(h_B, K, N);
+    cuda_utils::init_matrix(h_A, M, K);
+    cuda_utils::init_matrix(h_B, K, N);
 
-    cudaMalloc(&d_A, size_A);
-    cudaMalloc(&d_B, size_B);
-    cudaMalloc(&d_C, size_C);
+    CUDA_CHECK(cudaMalloc(&d_A, size_A));
+    CUDA_CHECK(cudaMalloc(&d_B, size_B));
+    CUDA_CHECK(cudaMalloc(&d_C, size_C));
 
-    cudaMemcpy(d_A, h_A, size_A, cudaMemcpyHostToDevice);
-    cudaMemcpy(d_B, h_B, size_B, cudaMemcpyHostToDevice);
+    CUDA_CHECK(cudaMemcpy(d_A, h_A, size_A, cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(d_B, h_B, size_B, cudaMemcpyHostToDevice));
 
     dim3 blockDim(BLOCK_SIZE, BLOCK_SIZE);
-    dim3 gridDim((N + BLOCK_SIZE - 1) / BLOCK_SIZE, (M + BLOCK_SIZE - 1) / BLOCK_SIZE);
+    dim3 gridDim(cuda_utils::ceil_div(M, BLOCK_SIZE), cuda_utils::ceil_div(N, BLOCK_SIZE));
 
     printf("performing warmup \n");
     for(int i = 0; i < 3; i++){
@@ -101,9 +92,9 @@ int main(){
     printf("benchmarking cpu \n");
     double cpu_time = 0.0;
     for (int i = 0; i < 20; i ++){
-        double start_t = get_time();
+        double start_t = cuda_utils::time_sec();
         matmul_cpu(h_A, h_B, h_C_cpu, M, K, N);
-        double end_t = get_time();
+        double end_t = cuda_utils::time_sec();
         cpu_time += end_t - start_t;
     }
 
@@ -112,10 +103,10 @@ int main(){
     printf("benchmarking gpu \n");
     double gpu_time = 0.0;
     for(int i = 0; i < 20; i++){
-        double start_t = get_time();
+        double start_t = cuda_utils::time_sec();
         matmul_gpu<<<gridDim, blockDim>>>(d_A, d_B, d_C, M, K, N);
-        cudaDeviceSynchronize();
-        double end_t = get_time();
+        CUDA_CHECK(cudaDeviceSynchronize());
+        double end_t = cuda_utils::time_sec();
         gpu_time += end_t - start_t;
     }
 
@@ -125,14 +116,11 @@ int main(){
     printf("GPU avg time: %f ms\n", gpu_time*1000);
     printf("speedup: %fx\n", cpu_time/gpu_time);
 
-    cudaMemcpy(h_C_gpu, d_C, size_C, cudaMemcpyDeviceToHost);
-    bool correct = true;
-    for (int i = 0; i < M*N; i++) {
-        if (fabs(h_C_cpu[i] - h_C_gpu[i]) > 1e-4) {
-            correct = false;
-            std::cout << i << " cpu: " << h_C_cpu[i] << " != " << h_C_gpu[i] << std::endl;
-            break;
-        }
+    CUDA_CHECK(cudaMemcpy(h_C_gpu, d_C, size_C, cudaMemcpyDeviceToHost));
+    std::size_t bad_idx = 0;
+    bool correct = cuda_utils::allclose_f32(h_C_cpu, h_C_gpu, static_cast<std::size_t>(M) * N, 1e-4f, 0.0f, &bad_idx);
+    if (!correct) {
+        std::cout << bad_idx << " cpu: " << h_C_cpu[bad_idx] << " != " << h_C_gpu[bad_idx] << std::endl;
     }
     printf("Results are %s\n", correct ? "correct" : "incorrect");
 
@@ -141,16 +129,11 @@ int main(){
     free(h_B);
     free(h_C_cpu);
     free(h_C_gpu);
-    cudaFree(d_A);
-    cudaFree(d_B);
-    cudaFree(d_C);
+    CUDA_CHECK(cudaFree(d_A));
+    CUDA_CHECK(cudaFree(d_B));
+    CUDA_CHECK(cudaFree(d_C));
 
-
-    cudaError_t error = cudaGetLastError();
-    if (error != cudaSuccess) {
-        std::cerr << "CUDA error: " << cudaGetErrorString(error) << std::endl;
-        return -1;
-    }
+    CUDA_CHECK(cudaGetLastError());
 
     return 0;
     
@@ -161,9 +144,9 @@ int main(){
 performing warmup 
 benchmarking cpu 
 benchmarking gpu 
-CPU avg time: 188.511704 ms
-GPU avg time: 0.087447 ms
-speedup: 2155.716604x
+CPU avg time: 188.603707 ms
+GPU avg time: 0.655357 ms
+speedup: 287.787911x
 Results are correct
 
 */

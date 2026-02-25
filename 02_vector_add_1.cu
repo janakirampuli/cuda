@@ -1,9 +1,8 @@
-// https://github.com/Infatoshi/cuda-course/blob/master/05_Writing_your_First_Kernels/02%20Kernels/00_vector_add_v1.cu
+#include "utils/cuda_utils.cuh"
 
-#include<stdio.h>
-#include<stdlib.h>
-#include<time.h>
-#include<cuda_runtime_api.h>
+#include <cmath>
+#include <cstdio>
+#include <cstdlib>
 
 #define N 10000000
 #define BLOCK_SIZE 256 // no of threads per block
@@ -21,18 +20,6 @@ __global__ void vector_add_gpu(float *a, float *b, float *c, int n){
     }
 }
 
-void init_vector(float *vec, int n){
-    for(int i = 0; i < n; i++){
-        vec[i] = (float)rand() / RAND_MAX;
-    }
-}
-
-double get_time() {
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return ts.tv_sec + ts.tv_nsec * 1e-9;
-}
-
 // h_ -> host, d_ -> device
 
 int main(){
@@ -46,18 +33,18 @@ int main(){
     h_c_gpu = (float*)malloc(size);
 
     srand(time(NULL));
-    init_vector(h_a, N);
-    init_vector(h_b, N);
+    cuda_utils::init_vector(h_a, N);
+    cuda_utils::init_vector(h_b, N);
 
-    cudaMalloc(&d_a, size);
-    cudaMalloc(&d_b, size);
-    cudaMalloc(&d_c, size);
+    CUDA_CHECK(cudaMalloc(&d_a, size));
+    CUDA_CHECK(cudaMalloc(&d_b, size));
+    CUDA_CHECK(cudaMalloc(&d_c, size));
 
-    cudaMemcpy(d_a, h_a, size, cudaMemcpyHostToDevice);
-    cudaMemcpy(d_b, h_b, size, cudaMemcpyHostToDevice);
+    CUDA_CHECK(cudaMemcpy(d_a, h_a, size, cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(d_b, h_b, size, cudaMemcpyHostToDevice));
 
     // ceil_div of vector length, num_of_threads
-    int num_blocks = (N + BLOCK_SIZE - 1) / BLOCK_SIZE;
+    int num_blocks = cuda_utils::ceil_div(N, BLOCK_SIZE);
 
     // warmup
     printf("performing warmup \n");
@@ -71,9 +58,9 @@ int main(){
     printf("benchmarking cpu \n");
     double cpu_time = 0.0;
     for (int i = 0; i < 20; i ++){
-        double start_t = get_time();
+        double start_t = cuda_utils::time_sec();
         vector_add_cpu(h_a, h_b, h_c_cpu, N);
-        double end_t = get_time();
+        double end_t = cuda_utils::time_sec();
         cpu_time += end_t - start_t;
     }
 
@@ -83,10 +70,10 @@ int main(){
     double gpu_time = 0.0;
     for(int i = 0; i < 20; i++){
         // cudaMemset(d_c, 0, size);
-        double start_t = get_time();
+        double start_t = cuda_utils::time_sec();
         vector_add_gpu<<<num_blocks, BLOCK_SIZE>>>(d_a, d_b, d_c, N);
-        cudaDeviceSynchronize();
-        double end_t = get_time();
+        CUDA_CHECK(cudaDeviceSynchronize());
+        double end_t = cuda_utils::time_sec();
         gpu_time += end_t - start_t;
     }
 
@@ -96,14 +83,8 @@ int main(){
     printf("GPU avg time: %f ms\n", gpu_time*1000);
     printf("speedup: %fx\n", cpu_time/gpu_time);
 
-    cudaMemcpy(h_c_gpu, d_c, size, cudaMemcpyDeviceToHost);
-    bool correct = true;
-    for (int i = 0; i < N; i++) {
-        if (fabs(h_c_cpu[i] - h_c_gpu[i]) > 1e-5) {
-            correct = false;
-            break;
-        }
-    }
+    CUDA_CHECK(cudaMemcpy(h_c_gpu, d_c, size, cudaMemcpyDeviceToHost));
+    bool correct = cuda_utils::allclose_f32(h_c_cpu, h_c_gpu, N, /*atol=*/1e-5f);
     printf("Results are %s\n", correct ? "correct" : "incorrect");
 
     // Free memory
@@ -111,9 +92,9 @@ int main(){
     free(h_b);
     free(h_c_cpu);
     free(h_c_gpu);
-    cudaFree(d_a);
-    cudaFree(d_b);
-    cudaFree(d_c);
+    CUDA_CHECK(cudaFree(d_a));
+    CUDA_CHECK(cudaFree(d_b));
+    CUDA_CHECK(cudaFree(d_c));
 
     return 0;
 
@@ -124,9 +105,9 @@ int main(){
 performing warmup 
 benchmarking cpu 
 benchmarking gpu 
-CPU avg time: 31.158035 ms
-GPU avg time: 0.250917 ms
-speedup: 124.176487x
+CPU avg time: 31.187655 ms
+GPU avg time: 0.250523 ms
+speedup: 124.490213x
 Results are correct
 
 */
