@@ -145,7 +145,7 @@ int main(){
 
 /*
 
-compile using: nvcc -arch=sm_86 08_matmul_3.cu --ptxas-options=-v && ./a.out
+compile using: nvcc -arch=sm_86 09_matmul_4.cu --ptxas-options=-v && ./a.out
 
 ptxas info    : 0 bytes gmem
 ptxas info    : Compiling entry function '_Z23matmul_1d_coarsened_gpuPfS_S_iii' for 'sm_86'
